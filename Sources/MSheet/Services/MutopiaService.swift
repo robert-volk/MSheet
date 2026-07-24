@@ -43,8 +43,8 @@ enum MutopiaService {
         return blocks.compactMap(parseResult)
     }
 
-    private static func parseResult(fromBlock rawBlock: Substring) -> SearchResult? {
-        let block = rawBlock.components(separatedBy: "</table>").first ?? String(rawBlock)
+    private static func parseResult(fromBlock rawBlock: String) -> SearchResult? {
+        let block = rawBlock.components(separatedBy: "</table>").first ?? rawBlock
         let cells = cellContents(in: block)
         guard cells.count >= 2 else { return nil }
 
