@@ -1,33 +1,24 @@
 import Foundation
 
-/// One work-page match from IMSLP's search, plus the composer/title split
-/// out of IMSLP's page-title convention: `"Work Title (Last, First)"`.
+enum ScoreSource: String, Hashable {
+    case imslp = "IMSLP"
+    case mutopia = "Mutopia"
+}
+
+/// One match from a search, already split into title/composer by whichever
+/// service found it — IMSLP and Mutopia format that information completely
+/// differently on their own pages, so each service does its own parsing
+/// before handing back a `SearchResult`.
 struct SearchResult: Identifiable, Hashable {
     let id = UUID()
-    let rawTitle: String
+    let title: String
+    let composer: String?
+    /// The work's normal, human-readable page — what "View on IMSLP" /
+    /// "View on Mutopia" opens.
     let pageURL: URL
-
-    var workTitle: String { Self.parse(rawTitle).workTitle }
-    var composer: String? { Self.parse(rawTitle).composer }
-
-    private static func parse(_ raw: String) -> (workTitle: String, composer: String?) {
-        guard let openParen = raw.lastIndex(of: "("), raw.hasSuffix(")") else {
-            return (raw, nil)
-        }
-        let title = raw[..<openParen].trimmingCharacters(in: .whitespaces)
-        let insideStart = raw.index(after: openParen)
-        let insideEnd = raw.index(before: raw.endIndex)
-        guard insideStart < insideEnd else { return (title, nil) }
-        let inside = raw[insideStart..<insideEnd]
-
-        // IMSLP names composers "Last, First" inside the parens; flip it to
-        // "First Last" for display, same as a normal byline reads.
-        let parts = inside.split(separator: ",", maxSplits: 1).map {
-            $0.trimmingCharacters(in: .whitespaces)
-        }
-        if parts.count == 2 {
-            return (title, "\(parts[1]) \(parts[0])")
-        }
-        return (title, String(inside))
-    }
+    /// When a service already knows the exact PDF link (Mutopia hands this
+    /// out directly in its search results), download skips IMSLP's
+    /// page-scraping step entirely and uses this instead.
+    let directDownloadURL: URL?
+    let source: ScoreSource
 }

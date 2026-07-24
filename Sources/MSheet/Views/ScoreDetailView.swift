@@ -21,7 +21,7 @@ struct ScoreDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(result.workTitle)
+                    Text(result.title)
                         .font(.system(size: 28, weight: .semibold, design: .serif))
                     if let composer = result.composer {
                         Text(composer)
@@ -33,7 +33,7 @@ struct ScoreDetailView: View {
                 Button {
                     showSafari = true
                 } label: {
-                    Label("View on IMSLP", systemImage: "arrow.up.right.square")
+                    Label("View on \(result.source.rawValue)", systemImage: "arrow.up.right.square")
                 }
                 .font(.subheadline.weight(.medium))
 
@@ -69,7 +69,7 @@ struct ScoreDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Couldn't download this automatically", systemImage: "info.circle")
                     .font(.subheadline.weight(.medium))
-                Text("Either this edition needs a one-time per-country copyright notice accepted first, or IMSLP didn't hand back a plain PDF. Open it on IMSLP and download it there instead.")
+                Text("Either this edition needs a one-time per-country copyright notice accepted first, or \(result.source.rawValue) didn't hand back a plain PDF. Open it on \(result.source.rawValue) and download it there instead.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -95,7 +95,7 @@ struct ScoreDetailView: View {
             Button {
                 showSafari = true
             } label: {
-                Label("Open on IMSLP to Download", systemImage: "arrow.up.right.square")
+                Label("Open on \(result.source.rawValue) to Download", systemImage: "arrow.up.right.square")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -122,7 +122,14 @@ struct ScoreDetailView: View {
     private func download() async {
         downloadState = .resolving
         do {
-            guard let pdfURL = try await IMSLPService.resolveDownloadURL(fromWorkPage: result.pageURL) else {
+            let pdfURL: URL
+            if let direct = result.directDownloadURL {
+                // Mutopia already hands back the exact file link in search
+                // results — no page-scraping step needed.
+                pdfURL = direct
+            } else if let resolved = try await IMSLPService.resolveDownloadURL(fromWorkPage: result.pageURL) {
+                pdfURL = resolved
+            } else {
                 downloadState = .needsManualDownload
                 return
             }
@@ -130,11 +137,11 @@ struct ScoreDetailView: View {
             downloadState = .downloading
             let (data, _) = try await URLSession.shared.data(from: pdfURL)
 
-            // The link IMSLP's page pointed to isn't always the raw file —
-            // it can land on an interstitial/mirror-choice page instead.
-            // Writing that to disk with a ".pdf" name would make PDFKit
-            // silently show a blank page later, so bail out here instead
-            // and send the person to the real IMSLP page.
+            // The resolved link isn't always the raw file — IMSLP in
+            // particular can land on an interstitial/mirror-choice page
+            // instead. Writing that to disk with a ".pdf" name would make
+            // PDFKit silently show a blank page later, so bail out here
+            // instead and send the person to the source's own page.
             guard looksLikePDF(data) else {
                 downloadState = .needsManualDownload
                 return
@@ -145,7 +152,7 @@ struct ScoreDetailView: View {
             try data.write(to: destination, options: .atomic)
 
             let saved = SavedScore(
-                title: result.workTitle,
+                title: result.title,
                 composer: result.composer,
                 sourceURL: result.pageURL,
                 fileName: fileName
@@ -164,10 +171,11 @@ struct ScoreDetailView: View {
     }
 
     /// Keeps the saved filename filesystem-safe and traceable back to the
-    /// work, since IMSLP's own filenames (SIBLEY1802..., PMLP2397-...) don't
-    /// read as anything to a person browsing their Library.
+    /// work, since a source's own filenames (SIBLEY1802..., PMLP2397-...)
+    /// don't read as anything to a person browsing their Library.
     private func sanitizedFileName() -> String {
-        let base = result.rawTitle
+        let byline = result.composer.map { " \($0)" } ?? ""
+        let base = "\(result.title)\(byline)"
             .replacingOccurrences(of: #"[^a-zA-Z0-9 \-]"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
         return base.isEmpty ? "Score.pdf" : "\(base).pdf"
@@ -177,8 +185,11 @@ struct ScoreDetailView: View {
 #Preview {
     NavigationStack {
         ScoreDetailView(result: SearchResult(
-            rawTitle: "Clair de Lune (Debussy, Claude)",
-            pageURL: URL(string: "https://imslp.org/wiki/Clair_de_Lune_(Debussy,_Claude)")!
+            title: "Clair de Lune",
+            composer: "Claude Debussy",
+            pageURL: URL(string: "https://imslp.org/wiki/Clair_de_Lune_(Debussy,_Claude)")!,
+            directDownloadURL: nil,
+            source: .imslp
         ))
     }
     .modelContainer(for: SavedScore.self, inMemory: true)

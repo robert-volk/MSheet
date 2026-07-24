@@ -4,41 +4,68 @@ An iOS app for finding free, public-domain sheet music by composer or title —
 typed or spoken — and saving the PDF to your phone for offline reading. Your
 saved Library is stored locally in a SwiftData (SQLite) database inside the
 app's sandbox; only the Search and Download screens talk to the network, and
-only to [IMSLP](https://imslp.org) (the Petrucci Music Library).
+only to [IMSLP](https://imslp.org) (the Petrucci Music Library) and
+[Mutopia Project](https://www.mutopiaproject.org).
 
 ## What it does
 
 - **Search** by composer, title, or both — type in the field or tap the mic
-  to speak it, with live on-device transcription.
-- **Results** show each matching work with its composer, pulled from IMSLP's
-  page-title convention.
+  to speak it, with live on-device transcription. Both IMSLP and Mutopia are
+  searched together; results are tagged with which one they came from.
+- **Results** show each matching work with its composer.
 - **Tap a result** to see its detail page, with a link to view the real page
-  on IMSLP.
+  on its source.
 - **Tap Download PDF** to save the score straight into your **Library** tab
   for offline reading — no account, no server of ours in the middle.
-- Some editions are still under copyright in certain countries; IMSLP gates
-  those behind a one-time notice a person has to read and accept themselves.
-  MSheet doesn't script past that — it tells you and opens the real IMSLP
-  page in-app so you can accept it and download from there instead.
+  Mutopia's files are always a direct download; some IMSLP editions are
+  still under copyright in certain countries, and IMSLP gates those behind a
+  one-time notice a person has to read and accept themselves. MSheet doesn't
+  script past that — it tells you and opens the real IMSLP page in-app so
+  you can accept it and download from there instead.
 - **Library** lists everything you've downloaded, opens each PDF in a
   built-in reader, and deletes with a swipe.
 
 ## Why this design
 
-- **IMSLP's `opensearch` API** — a public, keyless MediaWiki endpoint — is
-  the whole search backend. It only returns titles and page links, not
-  structured composer/instrumentation data, so `IMSLPService.swift` parses
-  IMSLP's own `"Work Title (Last, First)"` page-title convention to split out
-  a composer, and `ScoreDetailView` links out to the real page for anything
-  it doesn't have.
+- **Two sources, merged.** IMSLP has a huge catalog (~700k+ scanned works)
+  but gates some editions behind a per-country copyright notice. Mutopia's
+  catalog is much smaller (a curated few thousand works) but every file is
+  pre-cleared public domain/CC and downloads with zero friction — no gate,
+  no wait timer, no account. `SearchView` runs both searches concurrently
+  and merges the results, Mutopia first since it's guaranteed frictionless;
+  either source failing independently doesn't hide the other's results.
+- **IMSLP's full-text `list=search` API** — a public, keyless MediaWiki
+  endpoint — is IMSLP's half of the search backend. It only returns page
+  titles, not structured composer/instrumentation data, so
+  `IMSLPService.swift` parses IMSLP's own `"Work Title (Last, First)"`
+  page-title convention to split out a composer. (An earlier version used
+  the `opensearch` endpoint, which only prefix-matches the start of a title
+  — so composer-first queries never matched anything, and on top of that it
+  returns a shorter JSON shape for zero-result queries that crashed a naive
+  decoder. `list=search` does real full-text matching and degrades to an
+  empty result list instead.)
+- **Mutopia has no JSON API**, only an HTML results table, so
+  `MutopiaService.swift` parses that page directly — verified against the
+  live markup first rather than guessed, and parsed block-by-block (one
+  `<table class="table-bordered result-table">` per result) so a markup
+  change breaks individual results instead of the whole search.
+- **Downloads are verified, not trusted.** Whatever URL a source resolves to
+  gets checked for a real `%PDF-` header before it's written to disk or
+  added to the Library. Early on, a scraped IMSLP link that actually served
+  an interstitial page got saved with a `.pdf` name anyway, and PDFKit
+  silently rendered it blank — this check, plus an explicit error state in
+  `PDFPreviewView` if a file still won't open, turns that into a clear
+  "couldn't download automatically, open on `<source>`" prompt instead of a
+  blank screen.
 - **No scripted bypass of IMSLP's copyright notice.** Ungated scores expose
   a direct, page-relative PDF link (`/images/.../Something.pdf`) that
   `IMSLPService.resolveDownloadURL` downloads straight into the app. Gated
   scores only link to `Special:IMSLPDisclaimerAccept`, which requires a
   person to read and accept a per-country notice — MSheet detects that case
   and routes you to the real IMSLP page instead of working around it.
-  See the doc comment on `resolveDownloadURL` in
-  `Sources/MSheet/Services/IMSLPService.swift`.
+  Mutopia never needs this — `MutopiaService` hands back a direct PDF link
+  from search results, so `ScoreDetailView` skips the resolve step entirely
+  for Mutopia results.
 - **SwiftData**, local-only, for the Library — same on-device SQLite pattern
   as [ThoughtsApp](../ThoughtsApp), just tracking downloaded scores instead
   of notes. Downloaded PDFs live in `Documents/Scores/` inside the app's own
@@ -129,13 +156,14 @@ removes this step, if it's worth it to you later.
 | File | Purpose |
 |---|---|
 | `Sources/MSheet/MSheetApp.swift` | App entry point, sets up the local-only SwiftData container |
-| `Sources/MSheet/Models/SearchResult.swift` | A single IMSLP search hit, plus title/composer parsing |
+| `Sources/MSheet/Models/SearchResult.swift` | A single search hit from either source, already split into title/composer |
 | `Sources/MSheet/Models/SavedScore.swift` | The `SavedScore` SwiftData model + the local `Scores/` folder helper |
-| `Sources/MSheet/Services/IMSLPService.swift` | Search via IMSLP's `opensearch` API; resolves direct PDF links |
+| `Sources/MSheet/Services/IMSLPService.swift` | Search via IMSLP's full-text API; resolves direct PDF links, respecting the copyright gate |
+| `Sources/MSheet/Services/MutopiaService.swift` | Search + direct PDF links via Mutopia's HTML results page |
 | `Sources/MSheet/Services/DictationController.swift` | Wraps `Speech`/`AVAudioEngine` for on-device speech-to-text |
 | `Sources/MSheet/Views/RootTabView.swift` | Search / Library tab bar |
-| `Sources/MSheet/Views/SearchView.swift` | Search field (with mic), debounced live search, results list |
-| `Sources/MSheet/Views/ScoreDetailView.swift` | Score detail, download flow, disclaimer-gate handling |
+| `Sources/MSheet/Views/SearchView.swift` | Search field (with mic), debounced merged search across both sources, results list |
+| `Sources/MSheet/Views/ScoreDetailView.swift` | Score detail, download flow (validated), disclaimer-gate handling |
 | `Sources/MSheet/Views/LibraryView.swift` | List of downloaded scores, swipe to delete |
 | `Sources/MSheet/Views/PDFPreviewView.swift` | In-app PDF reader (PDFKit) for a downloaded score |
 | `Sources/MSheet/Views/SafariView.swift` | In-app browser for viewing/accepting IMSLP pages |
@@ -146,10 +174,13 @@ removes this step, if it's worth it to you later.
 
 ## Possible next steps (not built, in case you want them later)
 
-- A second source (CPDL for choral works, Musopen) alongside IMSLP, behind
-  the same `Download` button.
+- A third source — CPDL specifically, for choral/vocal works, which IMSLP
+  and Mutopia both cover less thoroughly.
 - Letting you pick which edition to download when a work has several (right
-  now it grabs the first PDF link IMSLP lists).
+  now it grabs the first PDF link the source lists).
+- Importing a PDF you downloaded manually (e.g. after accepting IMSLP's
+  copyright notice in Safari) into the Library, via the system document
+  picker — right now a manual download doesn't make it back into the app.
 - A "Browse by instrument/era" tab.
 - Filtering search by composer vs. title vs. instrument, rather than one
   combined field.

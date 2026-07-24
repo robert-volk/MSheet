@@ -9,6 +9,7 @@ struct SearchView: View {
     @State private var isSearching = false
     @State private var errorMessage: String?
     @State private var showPermissionAlert = false
+    @FocusState private var isFieldFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -18,6 +19,14 @@ struct SearchView: View {
                     ScoreDetailView(result: result)
                 }
                 .safeAreaInset(edge: .top) { searchField }
+                .toolbar {
+                    // Covers the empty-query and no-results states, which
+                    // have nothing to scroll for the interactive dismiss.
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") { isFieldFocused = false }
+                    }
+                }
         }
         .task(id: query) {
             await runSearch()
@@ -67,6 +76,10 @@ struct SearchView: View {
                 }
             }
             .listStyle(.plain)
+            // Lets a downward drag on the results list dismiss the
+            // keyboard, like Messages/Mail — the toolbar "Done" button
+            // below covers the empty/no-results states, which don't scroll.
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 
@@ -78,6 +91,9 @@ struct SearchView: View {
                 TextField("Composer, title, or both", text: $query)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .focused($isFieldFocused)
+                    .submitLabel(.search)
+                    .onSubmit { isFieldFocused = false }
                 if !query.isEmpty {
                     Button {
                         query = ""
@@ -126,10 +142,20 @@ struct SearchView: View {
 
         isSearching = true
         errorMessage = nil
-        do {
-            results = try await IMSLPService.search(trimmed)
-        } catch {
-            errorMessage = error.localizedDescription
+
+        // Each source fails independently — a Mutopia outage shouldn't hide
+        // working IMSLP results, and vice versa. Only surface an error if
+        // both come back empty-handed.
+        async let imslp = try? IMSLPService.search(trimmed)
+        async let mutopia = try? MutopiaService.search(trimmed)
+        let (imslpResults, mutopiaResults) = await (imslp, mutopia)
+
+        if imslpResults == nil && mutopiaResults == nil {
+            errorMessage = "Couldn't reach IMSLP or Mutopia. Check your connection and try again."
+        } else {
+            // Mutopia's downloads are always frictionless (no copyright
+            // gate), so surface those first.
+            results = (mutopiaResults ?? []) + (imslpResults ?? [])
         }
         isSearching = false
     }
@@ -140,13 +166,21 @@ private struct SearchResultRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(result.workTitle)
+            Text(result.title)
                 .font(.system(.body, design: .serif))
                 .fontWeight(.medium)
-            if let composer = result.composer {
-                Text(composer)
-                    .font(.footnote)
+            HStack(spacing: 6) {
+                if let composer = result.composer {
+                    Text(composer)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Text(result.source.rawValue)
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.secondary.opacity(0.15), in: Capsule())
             }
         }
         .padding(.vertical, 2)

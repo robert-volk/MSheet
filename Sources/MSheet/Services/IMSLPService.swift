@@ -51,8 +51,37 @@ enum IMSLPService {
 
         return decoded.query.search.compactMap { hit in
             guard let pageURL = pageURL(forTitle: hit.title) else { return nil }
-            return SearchResult(rawTitle: hit.title, pageURL: pageURL)
+            let parsed = parseTitle(hit.title)
+            return SearchResult(
+                title: parsed.title,
+                composer: parsed.composer,
+                pageURL: pageURL,
+                directDownloadURL: nil,
+                source: .imslp
+            )
         }
+    }
+
+    /// IMSLP names composers "Last, First" inside a trailing `(...)` on the
+    /// page title; flip it to "First Last" for display, same as a normal
+    /// byline reads.
+    private static func parseTitle(_ raw: String) -> (title: String, composer: String?) {
+        guard let openParen = raw.lastIndex(of: "("), raw.hasSuffix(")") else {
+            return (raw, nil)
+        }
+        let title = raw[..<openParen].trimmingCharacters(in: .whitespaces)
+        let insideStart = raw.index(after: openParen)
+        let insideEnd = raw.index(before: raw.endIndex)
+        guard insideStart < insideEnd else { return (title, nil) }
+        let inside = raw[insideStart..<insideEnd]
+
+        let parts = inside.split(separator: ",", maxSplits: 1).map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
+        if parts.count == 2 {
+            return (title, "\(parts[1]) \(parts[0])")
+        }
+        return (title, String(inside))
     }
 
     /// IMSLP page URLs are the title with spaces turned into underscores,
