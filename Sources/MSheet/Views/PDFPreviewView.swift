@@ -5,23 +5,33 @@ struct PDFPreviewView: View {
     let url: URL
 
     var body: some View {
-        PDFKitView(url: url)
-            .navigationTitle(url.deletingPathExtension().lastPathComponent)
-            .navigationBarTitleDisplayMode(.inline)
+        Group {
+            if let document = PDFDocument(url: url) {
+                PDFKitView(document: document)
+            } else {
+                ContentUnavailableView(
+                    "Couldn't open this PDF",
+                    systemImage: "doc.questionmark",
+                    description: Text("This file didn't save correctly. Remove it from your Library and download it again.")
+                )
+            }
+        }
+        .navigationTitle(url.deletingPathExtension().lastPathComponent)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 private struct PDFKitView: UIViewRepresentable {
-    let url: URL
+    let document: PDFDocument
 
     func makeUIView(context: Context) -> PDFView {
         let view = PDFView()
         view.autoScales = true
-        view.document = PDFDocument(url: url)
+        view.document = document
         return view
     }
 
     func updateUIView(_ uiView: PDFView, context: Context) {
-        uiView.document = PDFDocument(url: url)
+        uiView.document = document
     }
 }

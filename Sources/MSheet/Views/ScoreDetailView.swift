@@ -10,7 +10,7 @@ struct ScoreDetailView: View {
         case resolving
         case downloading
         case saved(fileName: String)
-        case needsDisclaimer
+        case needsManualDownload
         case failed(String)
     }
 
@@ -65,11 +65,11 @@ struct ScoreDetailView: View {
         case .saved:
             Label("Saved to your Library", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
-        case .needsDisclaimer:
+        case .needsManualDownload:
             VStack(alignment: .leading, spacing: 8) {
-                Label("Needs a one-time confirmation", systemImage: "info.circle")
+                Label("Couldn't download this automatically", systemImage: "info.circle")
                     .font(.subheadline.weight(.medium))
-                Text("IMSLP gates this edition behind a per-country copyright notice, so it can't be downloaded automatically. Open it on IMSLP, accept the notice once, then download it there.")
+                Text("Either this edition needs a one-time per-country copyright notice accepted first, or IMSLP didn't hand back a plain PDF. Open it on IMSLP and download it there instead.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -91,7 +91,7 @@ struct ScoreDetailView: View {
             }
             .buttonStyle(.borderedProminent)
 
-        case .needsDisclaimer:
+        case .needsManualDownload:
             Button {
                 showSafari = true
             } label: {
@@ -123,19 +123,26 @@ struct ScoreDetailView: View {
         downloadState = .resolving
         do {
             guard let pdfURL = try await IMSLPService.resolveDownloadURL(fromWorkPage: result.pageURL) else {
-                downloadState = .needsDisclaimer
+                downloadState = .needsManualDownload
                 return
             }
 
             downloadState = .downloading
-            let (tempURL, _) = try await URLSession.shared.download(from: pdfURL)
+            let (data, _) = try await URLSession.shared.data(from: pdfURL)
+
+            // The link IMSLP's page pointed to isn't always the raw file —
+            // it can land on an interstitial/mirror-choice page instead.
+            // Writing that to disk with a ".pdf" name would make PDFKit
+            // silently show a blank page later, so bail out here instead
+            // and send the person to the real IMSLP page.
+            guard looksLikePDF(data) else {
+                downloadState = .needsManualDownload
+                return
+            }
 
             let fileName = sanitizedFileName()
             let destination = FileManager.scoresDirectory.appendingPathComponent(fileName)
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
-            }
-            try FileManager.default.moveItem(at: tempURL, to: destination)
+            try data.write(to: destination, options: .atomic)
 
             let saved = SavedScore(
                 title: result.workTitle,
@@ -148,6 +155,12 @@ struct ScoreDetailView: View {
         } catch {
             downloadState = .failed(error.localizedDescription)
         }
+    }
+
+    private func looksLikePDF(_ data: Data) -> Bool {
+        let signature: [UInt8] = [0x25, 0x50, 0x44, 0x46, 0x2D] // "%PDF-"
+        guard data.count >= signature.count else { return false }
+        return data.prefix(signature.count).elementsEqual(signature)
     }
 
     /// Keeps the saved filename filesystem-safe and traceable back to the
