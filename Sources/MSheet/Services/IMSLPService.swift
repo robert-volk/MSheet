@@ -12,11 +12,20 @@ enum IMSLPServiceError: LocalizedError {
     }
 }
 
-/// Talks to IMSLP's public MediaWiki `opensearch` endpoint — no API key,
-/// no account, no rate-limit key required. It only returns matching page
-/// titles and links (not composer/instrumentation as structured data), so
-/// `resolveDownloadURL` separately loads a work's real page to find its
-/// files, exactly as a person browsing imslp.org would see them.
+/// Talks to IMSLP's public MediaWiki search API — no API key, no account,
+/// no rate-limit key required. Uses full-text search (`list=search`) rather
+/// than `opensearch`, because `opensearch` only prefix-matches the start of
+/// a page title, and IMSLP titles are formatted `"Work Title (Last, First)"`
+/// — composer at the end — so a perfectly normal query like "debussy clair
+/// de lune" would never match anything under prefix search. Full-text
+/// search also degrades gracefully to zero hits instead of a short/omitted
+/// JSON shape, which `opensearch` does on no-match queries and which a
+/// naive positional decoder chokes on.
+///
+/// It only returns matching page titles (not composer/instrumentation as
+/// structured data), so `resolveDownloadURL` separately loads a work's real
+/// page to find its files, exactly as a person browsing imslp.org would see
+/// them.
 enum IMSLPService {
     private static let session = URLSession.shared
 
@@ -28,21 +37,33 @@ enum IMSLPService {
             throw IMSLPServiceError.badURL
         }
         components.queryItems = [
-            URLQueryItem(name: "action", value: "opensearch"),
-            URLQueryItem(name: "search", value: trimmed),
-            URLQueryItem(name: "limit", value: "30"),
-            URLQueryItem(name: "namespace", value: "0"),
+            URLQueryItem(name: "action", value: "query"),
+            URLQueryItem(name: "list", value: "search"),
+            URLQueryItem(name: "srsearch", value: trimmed),
+            URLQueryItem(name: "srnamespace", value: "0"),
+            URLQueryItem(name: "srlimit", value: "30"),
             URLQueryItem(name: "format", value: "json"),
         ]
         guard let url = components.url else { throw IMSLPServiceError.badURL }
 
         let (data, _) = try await session.data(from: url)
-        let decoded = try JSONDecoder().decode(OpenSearchResponse.self, from: data)
+        let decoded = try JSONDecoder().decode(QuerySearchResponse.self, from: data)
 
-        return zip(decoded.titles, decoded.urls).compactMap { title, urlString in
-            guard let pageURL = URL(string: urlString) else { return nil }
-            return SearchResult(rawTitle: title, pageURL: pageURL)
+        return decoded.query.search.compactMap { hit in
+            guard let pageURL = pageURL(forTitle: hit.title) else { return nil }
+            return SearchResult(rawTitle: hit.title, pageURL: pageURL)
         }
+    }
+
+    /// IMSLP page URLs are the title with spaces turned into underscores,
+    /// percent-encoded into a `/wiki/` path — the same convention every
+    /// MediaWiki site uses.
+    private static func pageURL(forTitle title: String) -> URL? {
+        let underscored = title.replacingOccurrences(of: " ", with: "_")
+        guard let encoded = underscored.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            return nil
+        }
+        return URL(string: "https://imslp.org/wiki/\(encoded)")
     }
 
     /// Looks for a direct, page-relative PDF link on a work's IMSLP page
@@ -71,18 +92,12 @@ enum IMSLPService {
     }
 }
 
-/// `opensearch` responds with a fixed-shape, unkeyed array:
-/// `[query, [titles], [descriptions], [urls]]`. Decoding it positionally
-/// avoids writing a full model for what MediaWiki treats as a tuple.
-private struct OpenSearchResponse: Decodable {
-    let titles: [String]
-    let urls: [String]
-
-    init(from decoder: Decoder) throws {
-        var container = try decoder.unkeyedContainer()
-        _ = try container.decode(String.self)              // echoed query
-        titles = try container.decode([String].self)
-        _ = try container.decode([String].self)             // descriptions (unused)
-        urls = try container.decode([String].self)
+private struct QuerySearchResponse: Decodable {
+    struct Body: Decodable {
+        let search: [Hit]
     }
+    struct Hit: Decodable {
+        let title: String
+    }
+    let query: Body
 }
