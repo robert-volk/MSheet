@@ -153,7 +153,7 @@ struct SearchView: View {
 
             Text(dictation.isRecording ? "Listening…" : "Tap the mic, or type above, for a composer or title")
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color("NavigationGold"))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 
