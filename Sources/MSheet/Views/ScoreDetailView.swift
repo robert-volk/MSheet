@@ -46,6 +46,10 @@ struct ScoreDetailView: View {
             .padding()
         }
         .background(Color("AppBackground"))
+        // Dark by design, not just a fallback: musicians often read scores
+        // from dim stages and pits, and the original mockup deliberately
+        // put this screen in ink-dark rather than paper-light.
+        .preferredColorScheme(.dark)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showSafari) {
             SafariView(url: result.pageURL)

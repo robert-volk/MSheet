@@ -1,15 +1,40 @@
 import SwiftUI
 import UIKit
 
+/// "All / Title / Composer" — not "Instrument" too, unlike the original
+/// mockup: neither IMSLP nor Mutopia expose structured instrumentation, so
+/// an Instrument filter would just silently match nothing. This only
+/// narrows results already returned by the network search — it doesn't
+/// change the query itself.
+private enum SearchScope: String, CaseIterable, Identifiable {
+    case all = "All"
+    case title = "Title"
+    case composer = "Composer"
+
+    var id: String { rawValue }
+}
+
 struct SearchView: View {
     @StateObject private var dictation = DictationController()
 
     @State private var query = ""
     @State private var results: [SearchResult] = []
+    @State private var scope: SearchScope = .all
     @State private var isSearching = false
     @State private var errorMessage: String?
     @State private var showPermissionAlert = false
     @FocusState private var isFieldFocused: Bool
+
+    private var filteredResults: [SearchResult] {
+        switch scope {
+        case .all:
+            return results
+        case .title:
+            return results.filter { $0.title.localizedCaseInsensitiveContains(query) }
+        case .composer:
+            return results.filter { ($0.composer ?? "").localizedCaseInsensitiveContains(query) }
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -71,19 +96,43 @@ struct SearchView: View {
         } else if results.isEmpty {
             ContentUnavailableView.search(text: query)
         } else {
-            List(results) { result in
-                NavigationLink(value: result) {
-                    SearchResultRow(result: result)
+            VStack(spacing: 0) {
+                scopePicker
+                if filteredResults.isEmpty {
+                    ContentUnavailableView(
+                        "No matches in \(scope.rawValue)",
+                        systemImage: "line.3.horizontal.decrease.circle",
+                        description: Text("Switch back to All to search across everything.")
+                    )
+                } else {
+                    List(filteredResults) { result in
+                        NavigationLink(value: result) {
+                            SearchResultRow(result: result)
+                        }
+                        .listRowBackground(Color("AppCard"))
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    // Lets a downward drag on the results list dismiss the
+                    // keyboard, like Messages/Mail — the toolbar "Done"
+                    // button covers the empty/no-results states, which
+                    // don't scroll.
+                    .scrollDismissesKeyboard(.interactively)
                 }
-                .listRowBackground(Color("AppCard"))
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            // Lets a downward drag on the results list dismiss the
-            // keyboard, like Messages/Mail — the toolbar "Done" button
-            // below covers the empty/no-results states, which don't scroll.
-            .scrollDismissesKeyboard(.interactively)
         }
+    }
+
+    private var scopePicker: some View {
+        Picker("Scope", selection: $scope) {
+            ForEach(SearchScope.allCases) { option in
+                Text(option.rawValue).tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
     }
 
     private var searchField: some View {
