@@ -174,10 +174,15 @@ struct SearchView: View {
         Button {
             dictation.toggle()
         } label: {
-            Image(systemName: dictation.isRecording ? "waveform" : "mic.fill")
+            Image(systemName: dictation.isRecording ? "mic.fill" : "mic")
                 .symbolEffect(.variableColor.iterative, isActive: dictation.isRecording)
-                .foregroundStyle(dictation.isRecording ? Color.red : Color.accentColor)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 32)
+                .background(dictation.isRecording ? Color.red : Color.accentColor)
+                .clipShape(Circle())
         }
+        .accessibilityLabel(dictation.isRecording ? "Stop listening" : "Search by voice")
     }
 
     private func runSearch() async {
