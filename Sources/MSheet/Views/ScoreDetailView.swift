@@ -135,11 +135,21 @@ struct ScoreDetailView: View {
                 // Mutopia already hands back the exact file link in search
                 // results — no page-scraping step needed.
                 pdfURL = direct
-            } else if let resolved = try await IMSLPService.resolveDownloadURL(fromWorkPage: result.pageURL) {
-                pdfURL = resolved
             } else {
-                downloadState = .needsManualDownload
-                return
+                // IMSLP and CPDL each have their own page markup, so each
+                // needs its own scraping logic to find the file link.
+                let resolved: URL?
+                switch result.source {
+                case .cpdl:
+                    resolved = try await CPDLService.resolveDownloadURL(fromWorkPage: result.pageURL)
+                case .imslp, .mutopia:
+                    resolved = try await IMSLPService.resolveDownloadURL(fromWorkPage: result.pageURL)
+                }
+                guard let resolved else {
+                    downloadState = .needsManualDownload
+                    return
+                }
+                pdfURL = resolved
             }
 
             downloadState = .downloading

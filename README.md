@@ -4,39 +4,63 @@ An iOS app for finding free, public-domain sheet music by composer or title —
 typed or spoken — and saving the PDF to your phone for offline reading. Your
 saved Library is stored locally in a SwiftData (SQLite) database inside the
 app's sandbox; only the Search and Download screens talk to the network, and
-only to [Mutopia Project](https://www.mutopiaproject.org).
+only to [Mutopia Project](https://www.mutopiaproject.org) and
+[CPDL](https://cpdl.org) (the Choral Public Domain Library).
 
-Search results currently come from **Mutopia only** — every one of its files
-is pre-cleared public domain/CC with a direct download link, so a result is
-always a one-tap download. [IMSLP](https://imslp.org) support (a much bigger
-catalog, but with some editions gated behind a per-country copyright notice)
-is fully built and still in the codebase — `IMSLPService.swift` — just not
-called from `SearchView`, by request. See "Why this design" below for how to
-bring it back if that changes.
+Search results currently come from **Mutopia and CPDL** — every Mutopia file
+is pre-cleared public domain/CC with a direct download link, and CPDL (a
+501(c)(3) nonprofit) serves its choral/vocal scores the same way: no
+account, no watermark, no wait timer. [IMSLP](https://imslp.org) support (a
+much bigger general catalog, but with some editions gated behind a
+per-country copyright notice) is fully built and still in the codebase —
+`IMSLPService.swift` — just not called from `SearchView`, by request. See
+"Why this design" below for how to bring it back if that changes.
 
 ## What it does
 
 - **Search** by composer, title, or both — type in the field or tap the mic
-  to speak it, with live on-device transcription.
+  to speak it, with live on-device transcription. Mutopia and CPDL are
+  searched together; results are tagged with which one they came from.
 - **Results** show each matching work with its composer.
 - **Tap a result** to see its detail page, with a link to view the real page
-  on Mutopia.
+  on its source.
 - **Tap Download PDF** to save the score straight into your **Library** tab
   for offline reading — no account, no server of ours in the middle. Every
-  Mutopia result downloads directly, no extra steps.
+  Mutopia and CPDL result downloads directly, no extra steps.
 - **Library** lists everything you've downloaded, opens each PDF in a
   built-in reader, and deletes with a swipe.
 
 ## Why this design
 
+- **CPDL was chosen over other candidates after checking each one live**,
+  not from a search-results summary — `sheetmusicinternational.com` turned
+  out to gate clean (unwatermarked) downloads behind an account and mix
+  purchasable copyrighted works into search results (plus marketing copy
+  visibly written to influence how AI tools evaluate the site, which is
+  itself a reason for caution); `sheetmusiceden.com` mixes genuine free PDFs
+  with commercial/affiliate listings on the same results page and its
+  download links aren't stable direct file URLs; `musopen.org` sits behind a
+  Cloudflare bot-challenge page that blocks automated access outright. CPDL
+  had none of these problems — confirmed by actually downloading a file and
+  checking for a real `%PDF-` header before building anything against it.
 - **IMSLP is built but disabled, not deleted.** It was originally a second,
   merged source alongside Mutopia — IMSLP's catalog is far bigger
   (~700k+ scanned works) but gates some editions behind a per-country
   copyright notice, which was confusing enough in practice that search was
-  scoped down to Mutopia only. To bring it back: in `SearchView.runSearch()`,
-  go back to running `IMSLPService.search` and `MutopiaService.search`
-  concurrently and merging the results (straightforward — `SearchResult`
-  already carries a `source` field for tagging either one in the UI).
+  scoped down. To bring it back: in `SearchView.runSearch()`, add
+  `IMSLPService.search` as a third concurrent call alongside Mutopia and
+  CPDL (straightforward — `SearchResult` already carries a `source` field
+  for tagging it in the UI, and `ScoreDetailView.download()` already
+  switches on `source` to pick the right page-scraping logic).
+- **CPDL and IMSLP are the same MediaWiki software, but not the same
+  conventions.** Both expose a keyless full-text `list=search` API and a
+  page-relative `/images/.../Something.pdf` link pattern once a score is
+  ungated — but IMSLP page titles read `"Work Title (Last, First)"` while
+  CPDL's already read `"Work Title (First Last)"`, and CPDL's page URLs are
+  `/wiki/index.php?title=...` where IMSLP's are `/wiki/<Title>`. Every one
+  of these details was checked against the live sites (not assumed) before
+  `CPDLService.swift` was written, including downloading a real CPDL PDF to
+  confirm its bytes.
 - **IMSLP's full-text `list=search` API** — a public, keyless MediaWiki
   endpoint — is IMSLP's half of the search backend. It only returns page
   titles, not structured composer/instrumentation data, so
@@ -65,10 +89,13 @@ bring it back if that changes.
   `IMSLPService.resolveDownloadURL` downloads straight into the app. Gated
   scores only link to `Special:IMSLPDisclaimerAccept`, which requires a
   person to read and accept a per-country notice — MSheet detects that case
-  and routes you to the real IMSLP page instead of working around it.
-  Mutopia never needs this — `MutopiaService` hands back a direct PDF link
-  from search results, so `ScoreDetailView` skips the resolve step entirely
-  for Mutopia results.
+  and routes you to the real IMSLP page instead of working around it. CPDL's
+  `resolveDownloadURL` never encountered this while testing (every score
+  checked had a direct link), so it doesn't special-case a gate — if CPDL
+  ever does gate a work, it just falls back to "open on CPDL" like
+  everything else. Mutopia never needs a resolve step at all —
+  `MutopiaService` hands back a direct PDF link from search results, so
+  `ScoreDetailView` skips straight to downloading for Mutopia results.
 - **SwiftData**, local-only, for the Library — same on-device SQLite pattern
   as [ThoughtsApp](../ThoughtsApp), just tracking downloaded scores instead
   of notes. Downloaded PDFs live in `Documents/Scores/` inside the app's own
@@ -163,9 +190,10 @@ removes this step, if it's worth it to you later.
 | `Sources/MSheet/Models/SavedScore.swift` | The `SavedScore` SwiftData model + the local `Scores/` folder helper |
 | `Sources/MSheet/Services/IMSLPService.swift` | Search via IMSLP's full-text API; resolves direct PDF links, respecting the copyright gate — built, but not currently called from `SearchView` |
 | `Sources/MSheet/Services/MutopiaService.swift` | Search + direct PDF links via Mutopia's HTML results page |
+| `Sources/MSheet/Services/CPDLService.swift` | Search via CPDL's full-text API; resolves direct PDF links (choral/vocal) |
 | `Sources/MSheet/Services/DictationController.swift` | Wraps `Speech`/`AVAudioEngine` for on-device speech-to-text |
 | `Sources/MSheet/Views/RootTabView.swift` | Search / Library tab bar |
-| `Sources/MSheet/Views/SearchView.swift` | Search field (with mic), debounced Mutopia search, results list |
+| `Sources/MSheet/Views/SearchView.swift` | Search field (with mic), debounced Mutopia + CPDL search, results list |
 | `Sources/MSheet/Views/ScoreDetailView.swift` | Score detail, download flow (validated), disclaimer-gate handling |
 | `Sources/MSheet/Views/LibraryView.swift` | List of downloaded scores, swipe to delete |
 | `Sources/MSheet/Views/PDFPreviewView.swift` | In-app PDF reader (PDFKit) for a downloaded score |
@@ -177,8 +205,7 @@ removes this step, if it's worth it to you later.
 
 ## Possible next steps (not built, in case you want them later)
 
-- A third source — CPDL specifically, for choral/vocal works, which IMSLP
-  and Mutopia both cover less thoroughly.
+- Re-enabling IMSLP as a third source (see "Why this design" above).
 - Letting you pick which edition to download when a work has several (right
   now it grabs the first PDF link the source lists).
 - Importing a PDF you downloaded manually (e.g. after accepting IMSLP's

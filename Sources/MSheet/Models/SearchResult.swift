@@ -3,12 +3,13 @@ import Foundation
 enum ScoreSource: String, Hashable {
     case imslp = "IMSLP"
     case mutopia = "Mutopia"
+    case cpdl = "CPDL"
 }
 
 /// One match from a search, already split into title/composer by whichever
-/// service found it — IMSLP and Mutopia format that information completely
-/// differently on their own pages, so each service does its own parsing
-/// before handing back a `SearchResult`.
+/// service found it — IMSLP, Mutopia, and CPDL each format that information
+/// completely differently on their own pages, so each service does its own
+/// parsing before handing back a `SearchResult`.
 struct SearchResult: Identifiable, Hashable {
     let id = UUID()
     let title: String

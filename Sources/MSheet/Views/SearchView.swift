@@ -216,12 +216,18 @@ struct SearchView: View {
         errorMessage = nil
 
         // IMSLP results are intentionally excluded — see IMSLPService.swift,
-        // still there in case this changes later. Only Mutopia, whose files
-        // are always a frictionless direct download, is searched.
-        do {
-            results = try await MutopiaService.search(trimmed)
-        } catch {
-            errorMessage = "Couldn't reach Mutopia. Check your connection and try again."
+        // still there in case this changes later. Mutopia (frictionless
+        // direct downloads) and CPDL (choral/vocal, which neither Mutopia
+        // nor IMSLP cover well) are searched together, each failing
+        // independently so one outage doesn't hide the other's results.
+        async let mutopia = try? MutopiaService.search(trimmed)
+        async let cpdl = try? CPDLService.search(trimmed)
+        let (mutopiaResults, cpdlResults) = await (mutopia, cpdl)
+
+        if mutopiaResults == nil && cpdlResults == nil {
+            errorMessage = "Couldn't reach Mutopia or CPDL. Check your connection and try again."
+        } else {
+            results = (mutopiaResults ?? []) + (cpdlResults ?? [])
         }
         isSearching = false
     }
