@@ -8,6 +8,10 @@ struct RootTabView: View {
             LibraryView()
                 .tabItem { Label("Library", systemImage: "books.vertical") }
         }
+        // Same story as the NavigationStacks: the selected tab icon/label
+        // was reading system blue instead of the AccentColor asset, so it
+        // needs the same explicit .tint().
+        .tint(Color("NavigationGold"))
     }
 }
 

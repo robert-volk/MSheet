@@ -16,11 +16,7 @@ struct HomeButton: View {
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 48, height: 48)
-                // Color("AccentColor") is an explicit named-asset lookup,
-                // not Color.accentColor — it stays red even inside a
-                // NavigationStack that sets an ambient gold .tint() for
-                // its back button and toolbar chrome.
-                .background(Color("AccentColor"))
+                .background(Color("NavigationGold"))
                 .clipShape(Circle())
                 .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
         }
