@@ -30,13 +30,6 @@ struct ScoreDetailView: View {
                     }
                 }
 
-                Button {
-                    showSafari = true
-                } label: {
-                    Label("View on \(result.source.rawValue)", systemImage: "arrow.up.right.square")
-                }
-                .font(.subheadline.weight(.medium))
-
                 Divider()
 
                 statusArea

@@ -25,10 +25,13 @@ final class DictationController: ObservableObject {
     private var task: SFSpeechRecognitionTask?
 
     /// Auto-stops (and, since the search field is bound to `onPartialResult`,
-    /// auto-searches) once this long passes with no new transcription —
-    /// reset on every partial result, started the moment recording begins
-    /// so silence from the very start also closes the mic instead of
-    /// listening forever.
+    /// auto-searches) once this long passes with no new transcription after
+    /// speech has already been heard. Deliberately NOT started the moment
+    /// recording begins — there's real latency before the recognizer's
+    /// first partial result (mic warm-up, on-device model spin-up, the
+    /// person's own reaction time after tapping), so a timer running from
+    /// t=0 was closing the mic before anyone could say a word. It only
+    /// starts once the first partial result actually arrives.
     private let silenceTimeout: TimeInterval = 1.0
     private var silenceTimer: Timer?
 
@@ -133,7 +136,6 @@ final class DictationController: ObservableObject {
         }
 
         isRecording = true
-        resetSilenceTimer()
 
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }

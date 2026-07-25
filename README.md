@@ -4,36 +4,39 @@ An iOS app for finding free, public-domain sheet music by composer or title —
 typed or spoken — and saving the PDF to your phone for offline reading. Your
 saved Library is stored locally in a SwiftData (SQLite) database inside the
 app's sandbox; only the Search and Download screens talk to the network, and
-only to [IMSLP](https://imslp.org) (the Petrucci Music Library) and
-[Mutopia Project](https://www.mutopiaproject.org).
+only to [Mutopia Project](https://www.mutopiaproject.org).
+
+Search results currently come from **Mutopia only** — every one of its files
+is pre-cleared public domain/CC with a direct download link, so a result is
+always a one-tap download. [IMSLP](https://imslp.org) support (a much bigger
+catalog, but with some editions gated behind a per-country copyright notice)
+is fully built and still in the codebase — `IMSLPService.swift` — just not
+called from `SearchView`, by request. See "Why this design" below for how to
+bring it back if that changes.
 
 ## What it does
 
 - **Search** by composer, title, or both — type in the field or tap the mic
-  to speak it, with live on-device transcription. Both IMSLP and Mutopia are
-  searched together; results are tagged with which one they came from.
+  to speak it, with live on-device transcription.
 - **Results** show each matching work with its composer.
 - **Tap a result** to see its detail page, with a link to view the real page
-  on its source.
+  on Mutopia.
 - **Tap Download PDF** to save the score straight into your **Library** tab
-  for offline reading — no account, no server of ours in the middle.
-  Mutopia's files are always a direct download; some IMSLP editions are
-  still under copyright in certain countries, and IMSLP gates those behind a
-  one-time notice a person has to read and accept themselves. MSheet doesn't
-  script past that — it tells you and opens the real IMSLP page in-app so
-  you can accept it and download from there instead.
+  for offline reading — no account, no server of ours in the middle. Every
+  Mutopia result downloads directly, no extra steps.
 - **Library** lists everything you've downloaded, opens each PDF in a
   built-in reader, and deletes with a swipe.
 
 ## Why this design
 
-- **Two sources, merged.** IMSLP has a huge catalog (~700k+ scanned works)
-  but gates some editions behind a per-country copyright notice. Mutopia's
-  catalog is much smaller (a curated few thousand works) but every file is
-  pre-cleared public domain/CC and downloads with zero friction — no gate,
-  no wait timer, no account. `SearchView` runs both searches concurrently
-  and merges the results, Mutopia first since it's guaranteed frictionless;
-  either source failing independently doesn't hide the other's results.
+- **IMSLP is built but disabled, not deleted.** It was originally a second,
+  merged source alongside Mutopia — IMSLP's catalog is far bigger
+  (~700k+ scanned works) but gates some editions behind a per-country
+  copyright notice, which was confusing enough in practice that search was
+  scoped down to Mutopia only. To bring it back: in `SearchView.runSearch()`,
+  go back to running `IMSLPService.search` and `MutopiaService.search`
+  concurrently and merging the results (straightforward — `SearchResult`
+  already carries a `source` field for tagging either one in the UI).
 - **IMSLP's full-text `list=search` API** — a public, keyless MediaWiki
   endpoint — is IMSLP's half of the search backend. It only returns page
   titles, not structured composer/instrumentation data, so
@@ -158,11 +161,11 @@ removes this step, if it's worth it to you later.
 | `Sources/MSheet/MSheetApp.swift` | App entry point, sets up the local-only SwiftData container |
 | `Sources/MSheet/Models/SearchResult.swift` | A single search hit from either source, already split into title/composer |
 | `Sources/MSheet/Models/SavedScore.swift` | The `SavedScore` SwiftData model + the local `Scores/` folder helper |
-| `Sources/MSheet/Services/IMSLPService.swift` | Search via IMSLP's full-text API; resolves direct PDF links, respecting the copyright gate |
+| `Sources/MSheet/Services/IMSLPService.swift` | Search via IMSLP's full-text API; resolves direct PDF links, respecting the copyright gate — built, but not currently called from `SearchView` |
 | `Sources/MSheet/Services/MutopiaService.swift` | Search + direct PDF links via Mutopia's HTML results page |
 | `Sources/MSheet/Services/DictationController.swift` | Wraps `Speech`/`AVAudioEngine` for on-device speech-to-text |
 | `Sources/MSheet/Views/RootTabView.swift` | Search / Library tab bar |
-| `Sources/MSheet/Views/SearchView.swift` | Search field (with mic), debounced merged search across both sources, results list |
+| `Sources/MSheet/Views/SearchView.swift` | Search field (with mic), debounced Mutopia search, results list |
 | `Sources/MSheet/Views/ScoreDetailView.swift` | Score detail, download flow (validated), disclaimer-gate handling |
 | `Sources/MSheet/Views/LibraryView.swift` | List of downloaded scores, swipe to delete |
 | `Sources/MSheet/Views/PDFPreviewView.swift` | In-app PDF reader (PDFKit) for a downloaded score |

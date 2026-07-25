@@ -172,53 +172,29 @@ struct SearchView: View {
     }
 
     private var searchField: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Composer, title, or both", text: $query)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .focused($isFieldFocused)
-                    .submitLabel(.search)
-                    .onSubmit { isFieldFocused = false }
-                if !query.isEmpty {
-                    Button {
-                        query = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Composer, title, or both", text: $query)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($isFieldFocused)
+                .submitLabel(.search)
+                .onSubmit { isFieldFocused = false }
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
                 }
-                micButton
-            }
-            .padding(10)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-
-            if let message = dictation.errorMessage {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
         }
+        .padding(10)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
         .padding(.bottom, 8)
         .background(Color("AppBackground"))
-    }
-
-    private var micButton: some View {
-        Button {
-            dictation.toggle()
-        } label: {
-            Image(systemName: dictation.isRecording ? "mic.fill" : "mic")
-                .symbolEffect(.variableColor.iterative, isActive: dictation.isRecording)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(Color.accentColor)
-                .clipShape(Circle())
-        }
-        .accessibilityLabel(dictation.isRecording ? "Stop listening" : "Search by voice")
     }
 
     private func runSearch() async {
@@ -236,56 +212,57 @@ struct SearchView: View {
         isSearching = true
         errorMessage = nil
 
-        // Each source fails independently — a Mutopia outage shouldn't hide
-        // working IMSLP results, and vice versa. Only surface an error if
-        // both come back empty-handed.
-        async let imslp = try? IMSLPService.search(trimmed)
-        async let mutopia = try? MutopiaService.search(trimmed)
-        let (imslpResults, mutopiaResults) = await (imslp, mutopia)
-
-        if imslpResults == nil && mutopiaResults == nil {
-            errorMessage = "Couldn't reach IMSLP or Mutopia. Check your connection and try again."
-        } else {
-            // Mutopia's downloads are always frictionless (no copyright
-            // gate), so surface those first.
-            results = (mutopiaResults ?? []) + (imslpResults ?? [])
+        // IMSLP results are intentionally excluded — see IMSLPService.swift,
+        // still there in case this changes later. Only Mutopia, whose files
+        // are always a frictionless direct download, is searched.
+        do {
+            results = try await MutopiaService.search(trimmed)
+        } catch {
+            errorMessage = "Couldn't reach Mutopia. Check your connection and try again."
         }
         isSearching = false
     }
 }
 
-/// A faint, tiled piano-key texture — one real octave (7 white keys, black
-/// keys skipping the E-F and B-C gaps) repeated across the available width.
-/// Drawn procedurally with Canvas rather than an image asset, so it scales
-/// to any screen size without needing a pre-rendered tile.
+/// A tiled piano-key texture — one real octave (7 white keys, black keys
+/// skipping the E-F and B-C gaps) repeated across both width AND height
+/// using a fixed tile size, so keys read as short repeating tiles rather
+/// than one giant key stretched to the full screen height. Drawn
+/// procedurally with Canvas rather than an image asset, so it scales to any
+/// screen size without needing a pre-rendered tile.
 private struct PianoKeyBackground: View {
     private let whiteKeyWidth: CGFloat = 20
     private let blackKeyWidth: CGFloat = 12
+    private let tileHeight: CGFloat = 90
     private let blackKeyHeightRatio: CGFloat = 0.6
     private let blackKeyOffsets = [1, 2, 4, 5, 6] // after C, D, F, G, A — skipping E and B
 
     var body: some View {
         Canvas { context, size in
-            let lineColor = Color.primary.opacity(0.08)
-            let keyColor = Color.primary.opacity(0.08)
+            let lineColor = Color.primary.opacity(0.22)
+            let keyColor = Color.primary.opacity(0.22)
             let octaveWidth = whiteKeyWidth * 7
-            let blackKeyHeight = size.height * blackKeyHeightRatio
+            let blackKeyHeight = tileHeight * blackKeyHeightRatio
 
-            var x: CGFloat = 0
-            while x < size.width {
-                for i in 1..<7 {
-                    let lineX = x + CGFloat(i) * whiteKeyWidth
-                    var path = Path()
-                    path.move(to: CGPoint(x: lineX, y: 0))
-                    path.addLine(to: CGPoint(x: lineX, y: size.height))
-                    context.stroke(path, with: .color(lineColor), lineWidth: 1)
+            var y: CGFloat = 0
+            while y < size.height {
+                var x: CGFloat = 0
+                while x < size.width {
+                    for i in 1..<7 {
+                        let lineX = x + CGFloat(i) * whiteKeyWidth
+                        var path = Path()
+                        path.move(to: CGPoint(x: lineX, y: y))
+                        path.addLine(to: CGPoint(x: lineX, y: y + tileHeight))
+                        context.stroke(path, with: .color(lineColor), lineWidth: 1.5)
+                    }
+                    for offset in blackKeyOffsets {
+                        let centerX = x + CGFloat(offset) * whiteKeyWidth
+                        let rect = CGRect(x: centerX - blackKeyWidth / 2, y: y, width: blackKeyWidth, height: blackKeyHeight)
+                        context.fill(Path(rect), with: .color(keyColor))
+                    }
+                    x += octaveWidth
                 }
-                for offset in blackKeyOffsets {
-                    let centerX = x + CGFloat(offset) * whiteKeyWidth
-                    let rect = CGRect(x: centerX - blackKeyWidth / 2, y: 0, width: blackKeyWidth, height: blackKeyHeight)
-                    context.fill(Path(rect), with: .color(keyColor))
-                }
-                x += octaveWidth
+                y += tileHeight
             }
         }
     }
