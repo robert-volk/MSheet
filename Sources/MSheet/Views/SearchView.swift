@@ -79,11 +79,7 @@ struct SearchView: View {
     @ViewBuilder
     private var resultsArea: some View {
         if query.trimmingCharacters(in: .whitespaces).isEmpty {
-            ContentUnavailableView(
-                "Search for sheet music",
-                systemImage: "music.note",
-                description: Text("Type or tap the mic — try a composer, a title, or both.")
-            )
+            centeredMicPrompt
         } else if isSearching {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -121,6 +117,45 @@ struct SearchView: View {
                 }
             }
         }
+    }
+
+    /// The main voice-search CTA, centered in the screen before any query
+    /// exists — bigger and more prominent than the small mic that stays in
+    /// the search field once results are showing.
+    private var centeredMicPrompt: some View {
+        VStack(spacing: 18) {
+            Spacer()
+
+            Button {
+                dictation.toggle()
+            } label: {
+                Image(systemName: dictation.isRecording ? "mic.fill" : "mic")
+                    .symbolEffect(.variableColor.iterative, isActive: dictation.isRecording)
+                    .font(.system(size: 34, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(width: 88, height: 88)
+                    .background(dictation.isRecording ? Color.red : Color.accentColor)
+                    .clipShape(Circle())
+            }
+            .accessibilityLabel(dictation.isRecording ? "Stop listening" : "Search by voice")
+
+            Text(dictation.isRecording ? "Listening…" : "Tap the mic, or type above, for a composer or title")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+
+            if let message = dictation.errorMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var scopePicker: some View {
