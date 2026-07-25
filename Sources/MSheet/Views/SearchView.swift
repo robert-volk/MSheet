@@ -146,7 +146,7 @@ struct SearchView: View {
                     .font(.system(size: 34, weight: .medium))
                     .foregroundStyle(.white)
                     .frame(width: 88, height: 88)
-                    .background(Color("AccentColor"))
+                    .background(Color("NavigationGold"))
                     .clipShape(Circle())
             }
             .accessibilityLabel(dictation.isRecording ? "Stop listening" : "Search by voice")
@@ -155,7 +155,13 @@ struct SearchView: View {
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(Color("NavigationGold"))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                // A solid card behind the text lifts it above the piano-key
+                // pattern directly behind it — gold text sitting right on
+                // top of alternating light/dark keys was hard to read.
+                .background(Color("AppCard"), in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 24)
 
             if let message = dictation.errorMessage {
                 Text(message)
