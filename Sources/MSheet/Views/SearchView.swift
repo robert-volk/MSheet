@@ -249,7 +249,7 @@ private struct PianoKeyBackground: View {
     var body: some View {
         Canvas { context, size in
             let lineColor = Color.primary.opacity(0.22)
-            let keyColor = Color.primary.opacity(0.22)
+            let keyColor = Color.primary.opacity(0.55)
             let octaveWidth = whiteKeyWidth * 7
             let blackKeyHeight = tileHeight * blackKeyHeightRatio
 
