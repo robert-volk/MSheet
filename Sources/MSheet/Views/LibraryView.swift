@@ -22,11 +22,14 @@ struct LibraryView: View {
                             } label: {
                                 LibraryRow(score: score)
                             }
+                            .listRowBackground(Color("AppCard"))
                         }
                         .onDelete(perform: delete)
                     }
+                    .scrollContentBackground(.hidden)
                 }
             }
+            .background(Color("AppBackground"))
             .navigationTitle("Library")
         }
     }

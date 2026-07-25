@@ -45,6 +45,7 @@ struct ScoreDetailView: View {
             }
             .padding()
         }
+        .background(Color("AppBackground"))
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showSafari) {
             SafariView(url: result.pageURL)
@@ -64,7 +65,7 @@ struct ScoreDetailView: View {
                 .foregroundStyle(.secondary)
         case .saved:
             Label("Saved to your Library", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(Color("PDGreen"))
         case .needsManualDownload:
             VStack(alignment: .leading, spacing: 8) {
                 Label("Couldn't download this automatically", systemImage: "info.circle")

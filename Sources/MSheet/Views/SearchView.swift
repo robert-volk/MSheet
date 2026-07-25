@@ -14,6 +14,7 @@ struct SearchView: View {
     var body: some View {
         NavigationStack {
             resultsArea
+                .background(Color("AppBackground"))
                 .navigationTitle("Search")
                 .navigationDestination(for: SearchResult.self) { result in
                     ScoreDetailView(result: result)
@@ -74,8 +75,10 @@ struct SearchView: View {
                 NavigationLink(value: result) {
                     SearchResultRow(result: result)
                 }
+                .listRowBackground(Color("AppCard"))
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             // Lets a downward drag on the results list dismiss the
             // keyboard, like Messages/Mail — the toolbar "Done" button
             // below covers the empty/no-results states, which don't scroll.
@@ -115,7 +118,7 @@ struct SearchView: View {
         }
         .padding(.horizontal)
         .padding(.bottom, 8)
-        .background(.bar)
+        .background(Color("AppBackground"))
     }
 
     private var micButton: some View {
