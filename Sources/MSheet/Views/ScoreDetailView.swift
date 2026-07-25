@@ -121,6 +121,7 @@ struct ScoreDetailView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .tint(Color("DownloadBrown"))
         }
     }
 

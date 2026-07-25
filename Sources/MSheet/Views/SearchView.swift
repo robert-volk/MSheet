@@ -134,7 +134,7 @@ struct SearchView: View {
                     .font(.system(size: 34, weight: .medium))
                     .foregroundStyle(.white)
                     .frame(width: 88, height: 88)
-                    .background(dictation.isRecording ? Color.red : Color.accentColor)
+                    .background(Color.accentColor)
                     .clipShape(Circle())
             }
             .accessibilityLabel(dictation.isRecording ? "Stop listening" : "Search by voice")
@@ -155,7 +155,8 @@ struct SearchView: View {
 
             Spacer()
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(PianoKeyBackground())
     }
 
     private var scopePicker: some View {
@@ -214,7 +215,7 @@ struct SearchView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
-                .background(dictation.isRecording ? Color.red : Color.accentColor)
+                .background(Color.accentColor)
                 .clipShape(Circle())
         }
         .accessibilityLabel(dictation.isRecording ? "Stop listening" : "Search by voice")
@@ -250,6 +251,43 @@ struct SearchView: View {
             results = (mutopiaResults ?? []) + (imslpResults ?? [])
         }
         isSearching = false
+    }
+}
+
+/// A faint, tiled piano-key texture — one real octave (7 white keys, black
+/// keys skipping the E-F and B-C gaps) repeated across the available width.
+/// Drawn procedurally with Canvas rather than an image asset, so it scales
+/// to any screen size without needing a pre-rendered tile.
+private struct PianoKeyBackground: View {
+    private let whiteKeyWidth: CGFloat = 20
+    private let blackKeyWidth: CGFloat = 12
+    private let blackKeyHeightRatio: CGFloat = 0.6
+    private let blackKeyOffsets = [1, 2, 4, 5, 6] // after C, D, F, G, A — skipping E and B
+
+    var body: some View {
+        Canvas { context, size in
+            let lineColor = Color.primary.opacity(0.08)
+            let keyColor = Color.primary.opacity(0.08)
+            let octaveWidth = whiteKeyWidth * 7
+            let blackKeyHeight = size.height * blackKeyHeightRatio
+
+            var x: CGFloat = 0
+            while x < size.width {
+                for i in 1..<7 {
+                    let lineX = x + CGFloat(i) * whiteKeyWidth
+                    var path = Path()
+                    path.move(to: CGPoint(x: lineX, y: 0))
+                    path.addLine(to: CGPoint(x: lineX, y: size.height))
+                    context.stroke(path, with: .color(lineColor), lineWidth: 1)
+                }
+                for offset in blackKeyOffsets {
+                    let centerX = x + CGFloat(offset) * whiteKeyWidth
+                    let rect = CGRect(x: centerX - blackKeyWidth / 2, y: 0, width: blackKeyWidth, height: blackKeyHeight)
+                    context.fill(Path(rect), with: .color(keyColor))
+                }
+                x += octaveWidth
+            }
+        }
     }
 }
 
