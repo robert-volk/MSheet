@@ -36,6 +36,9 @@ struct LibraryView: View {
             .background(Color("AppBackground"))
             .navigationTitle("Library")
         }
+        // Same reasoning as SearchView: SwiftUI-native mechanism for
+        // tinting this stack's own back button/toolbar chrome gold.
+        .tint(Color("NavigationGold"))
     }
 
     private func delete(at offsets: IndexSet) {

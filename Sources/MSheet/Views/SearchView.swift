@@ -57,6 +57,15 @@ struct SearchView: View {
                     }
                 }
         }
+        // Colors the back button and default-styled toolbar items (the
+        // keyboard "Done" button here, "Print" in PDFPreviewView) gold.
+        // This is the SwiftUI-native mechanism for tinting nav-stack chrome;
+        // UINavigationBar.appearance() doesn't reliably reach a
+        // NavigationStack's own back button. The mic buttons and Home
+        // button use Color("AccentColor") (an explicit named lookup, not
+        // Color.accentColor) specifically so this ambient tint can't turn
+        // them gold too.
+        .tint(Color("NavigationGold"))
         .task(id: query) {
             await runSearch()
         }
@@ -137,7 +146,7 @@ struct SearchView: View {
                     .font(.system(size: 34, weight: .medium))
                     .foregroundStyle(.white)
                     .frame(width: 88, height: 88)
-                    .background(Color.accentColor)
+                    .background(Color("AccentColor"))
                     .clipShape(Circle())
             }
             .accessibilityLabel(dictation.isRecording ? "Stop listening" : "Search by voice")
@@ -215,19 +224,14 @@ struct SearchView: View {
         isSearching = true
         errorMessage = nil
 
-        // IMSLP results are intentionally excluded — see IMSLPService.swift,
-        // still there in case this changes later. Mutopia (frictionless
-        // direct downloads) and CPDL (choral/vocal, which neither Mutopia
-        // nor IMSLP cover well) are searched together, each failing
-        // independently so one outage doesn't hide the other's results.
-        async let mutopia = try? MutopiaService.search(trimmed)
-        async let cpdl = try? CPDLService.search(trimmed)
-        let (mutopiaResults, cpdlResults) = await (mutopia, cpdl)
-
-        if mutopiaResults == nil && cpdlResults == nil {
-            errorMessage = "Couldn't reach Mutopia or CPDL. Check your connection and try again."
-        } else {
-            results = (mutopiaResults ?? []) + (cpdlResults ?? [])
+        // IMSLP and CPDL results are intentionally excluded — see
+        // IMSLPService.swift and CPDLService.swift, still there in case
+        // this changes later. Only Mutopia, whose files are always a
+        // frictionless direct download, is searched.
+        do {
+            results = try await MutopiaService.search(trimmed)
+        } catch {
+            errorMessage = "Couldn't reach Mutopia. Check your connection and try again."
         }
         isSearching = false
     }
