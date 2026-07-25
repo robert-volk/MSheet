@@ -24,6 +24,14 @@ final class DictationController: ObservableObject {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
 
+    /// Auto-stops (and, since the search field is bound to `onPartialResult`,
+    /// auto-searches) once this long passes with no new transcription —
+    /// reset on every partial result, started the moment recording begins
+    /// so silence from the very start also closes the mic instead of
+    /// listening forever.
+    private let silenceTimeout: TimeInterval = 1.0
+    private var silenceTimer: Timer?
+
     func toggle() {
         if isRecording {
             stop()
@@ -48,6 +56,8 @@ final class DictationController: ObservableObject {
 
     func stop() {
         guard isRecording else { return }
+        silenceTimer?.invalidate()
+        silenceTimer = nil
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         request?.endAudio()
@@ -56,6 +66,15 @@ final class DictationController: ObservableObject {
         request = nil
         isRecording = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func resetSilenceTimer() {
+        silenceTimer?.invalidate()
+        silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceTimeout, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.stop()
+            }
+        }
     }
 
     private func requestSpeechAuthorization() async -> Bool {
@@ -114,12 +133,14 @@ final class DictationController: ObservableObject {
         }
 
         isRecording = true
+        resetSilenceTimer()
 
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
             Task { @MainActor in
                 if let result {
                     self.onPartialResult?(result.bestTranscription.formattedString)
+                    self.resetSilenceTimer()
                 }
                 if error != nil || (result?.isFinal ?? false) {
                     self.stop()
