@@ -4,6 +4,7 @@ import UIKit
 
 struct PDFPreviewView: View {
     let url: URL
+    @Binding var path: NavigationPath
 
     var body: some View {
         let document = PDFDocument(url: url)
@@ -31,6 +32,14 @@ struct PDFPreviewView: View {
                     }
                 }
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            HStack {
+                Spacer()
+                HomeButton(path: $path)
+                Spacer()
+            }
+            .padding(.bottom, 8)
         }
     }
 

@@ -4,9 +4,13 @@ import SwiftData
 struct LibraryView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SavedScore.savedAt, order: .reverse) private var scores: [SavedScore]
+    /// Owned here so HomeButton, on a PDF pushed from this stack, can pop
+    /// straight back to this root — separate from Search's own path, since
+    /// each tab has its own independent navigation stack.
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if scores.isEmpty {
                     ContentUnavailableView(
@@ -18,7 +22,7 @@ struct LibraryView: View {
                     List {
                         ForEach(scores) { score in
                             NavigationLink {
-                                PDFPreviewView(url: score.fileURL)
+                                PDFPreviewView(url: score.fileURL, path: $path)
                             } label: {
                                 LibraryRow(score: score)
                             }

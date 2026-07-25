@@ -24,6 +24,9 @@ struct SearchView: View {
     @State private var errorMessage: String?
     @State private var showPermissionAlert = false
     @FocusState private var isFieldFocused: Bool
+    /// Owned here so HomeButton, on screens pushed from this stack, can pop
+    /// straight back to this root instead of just one level.
+    @State private var path = NavigationPath()
 
     private var filteredResults: [SearchResult] {
         switch scope {
@@ -37,12 +40,12 @@ struct SearchView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             resultsArea
                 .background(Color("AppBackground"))
-                .navigationTitle("Search")
+                .navigationTitle("Music Search")
                 .navigationDestination(for: SearchResult.self) { result in
-                    ScoreDetailView(result: result)
+                    ScoreDetailView(result: result, path: $path)
                 }
                 .safeAreaInset(edge: .top) { searchField }
                 .toolbar {
@@ -140,8 +143,8 @@ struct SearchView: View {
             .accessibilityLabel(dictation.isRecording ? "Stop listening" : "Search by voice")
 
             Text(dictation.isRecording ? "Listening…" : "Tap the mic, or type above, for a composer or title")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.primary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 

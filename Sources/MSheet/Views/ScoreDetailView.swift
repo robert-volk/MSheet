@@ -4,6 +4,7 @@ import Foundation
 struct ScoreDetailView: View {
     @Environment(\.modelContext) private var modelContext
     let result: SearchResult
+    @Binding var path: NavigationPath
 
     private enum DownloadState: Equatable {
         case idle
@@ -47,6 +48,14 @@ struct ScoreDetailView: View {
         .sheet(isPresented: $showSafari) {
             SafariView(url: result.pageURL)
         }
+        .safeAreaInset(edge: .bottom) {
+            HStack {
+                Spacer()
+                HomeButton(path: $path)
+                Spacer()
+            }
+            .padding(.bottom, 8)
+        }
     }
 
     @ViewBuilder
@@ -82,7 +91,7 @@ struct ScoreDetailView: View {
         switch downloadState {
         case .saved(let fileName):
             NavigationLink {
-                PDFPreviewView(url: FileManager.scoresDirectory.appendingPathComponent(fileName))
+                PDFPreviewView(url: FileManager.scoresDirectory.appendingPathComponent(fileName), path: $path)
             } label: {
                 Label("Open Downloaded PDF", systemImage: "doc.richtext")
                     .frame(maxWidth: .infinity)
@@ -183,13 +192,16 @@ struct ScoreDetailView: View {
 
 #Preview {
     NavigationStack {
-        ScoreDetailView(result: SearchResult(
-            title: "Clair de Lune",
-            composer: "Claude Debussy",
-            pageURL: URL(string: "https://imslp.org/wiki/Clair_de_Lune_(Debussy,_Claude)")!,
-            directDownloadURL: nil,
-            source: .imslp
-        ))
+        ScoreDetailView(
+            result: SearchResult(
+                title: "Clair de Lune",
+                composer: "Claude Debussy",
+                pageURL: URL(string: "https://imslp.org/wiki/Clair_de_Lune_(Debussy,_Claude)")!,
+                directDownloadURL: nil,
+                source: .imslp
+            ),
+            path: .constant(NavigationPath())
+        )
     }
     .modelContainer(for: SavedScore.self, inMemory: true)
 }
